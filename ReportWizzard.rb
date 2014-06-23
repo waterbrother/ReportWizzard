@@ -210,7 +210,10 @@ def wave_the_magic_wand(path, date1, date2, path_out)
                   "Unique Opens",
                   "Unique Open Rate",
                   "Unique Clicks",
-                  "Unique Click Rate"
+                  "Unique Click Rate",
+				  "Total Clicks",
+				  "Total Click Rate (total clicks/total opens)",
+				  "Individual's Interest Rate (total clicks/unique opens)"
                 ]
         
         ]
@@ -240,6 +243,10 @@ def wave_the_magic_wand(path, date1, date2, path_out)
                                         #add to unique clicks
                                         line[8] += link[2].to_f
                                         #unique click rate calculated after total
+										#add to total clicks
+										line[10] += link[1].to_f
+										#total click rate calculated after total
+										#IIR calc. after total
                                         break
                                 end
                         end
@@ -265,7 +272,12 @@ def wave_the_magic_wand(path, date1, date2, path_out)
                                             # Unique Clicks
                                             link[2].to_f,
                                             #unique click rate calculated after total
-                                            "Unique Click Rate"
+                                            "Unique Click Rate",
+											link[1].to_f,
+											#total open rate calculated after total
+											"Total Open Rate",
+											# IIR calculated after total
+											"Individual's Interest Rate"
                                 ]
                         end
                 end
@@ -292,6 +304,20 @@ def wave_the_magic_wand(path, date1, date2, path_out)
                 array[9] = "%5.2f" % d
         end
 
+		#calculate total click rate
+        output[1..-1].each do |array|
+                d = (array[10] / array[3]) * 100
+
+                array[11] = "%5.2f" % d
+        end
+		
+		#calculate Idividual's Interest Rate
+        output[1..-1].each do |array|
+                d = (array[10] / array[6]) * 100
+
+                array[12] = "%5.2f" % d
+        end
+		
         #puts "Output:"
         #puts output
 
