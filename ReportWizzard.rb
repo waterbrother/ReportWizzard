@@ -333,6 +333,7 @@ Shoes.app :title => "Report Wizzard", width: 1050, height: 750 do
                         push.click do
                                 @path = ask_open_folder
                                 if @path != nil
+										@path = @path + "/"
                                         note.replace "#{@path}"
                                 end
                         end
@@ -360,6 +361,7 @@ Shoes.app :title => "Report Wizzard", width: 1050, height: 750 do
                         push.click do
                                 @output_path = ask_save_file
                                 if @output_path != nil
+										@output_path = "#{@output_path}.csv"
                                         note.replace "#{@output_path}"
                                 end
                         end
@@ -393,7 +395,7 @@ Shoes.app :title => "Report Wizzard", width: 1050, height: 750 do
                                                         #elsif os_type == "windows"
                                                         #        @path = @path + "\\"
                                                         #end
-                                                        @path = @path + "/"
+                                                        
 														fList = Dir.glob("#{@path}*.csv")
                                                         wave_the_magic_wand(@path, start.string, finish.string, @output_path)
                                                         #alert "POOF! \n\n Input path: #{@path}\nFile saved to: \n #{@output_path}"
