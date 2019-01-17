@@ -4,21 +4,43 @@ require 'date'
 class Report
         def initialize(filepath)
                 @filePath = filepath
-                @fileContents = CSV.read(filepath)
+                #@fileContents = CSV.read(filepath)
+				#due to encoding problems with Windows, we have to parse the CSVs ourselves
+				@fileContents = Array.new
+				File.open( filepath , "r" ) do |read|
+						read.each_line do |line|
+							#split the line into an array, but only if the 
+							#character follwing the comma is a quotation mark
+							@fileContents << line.chomp.split(/,(?=")/)
+						end
+				end
+				
+				#strip extraneous quotation marks from all values
+				@fileContents.each do |lineA|
+						lineA.each do |index|
+								index.gsub!("\"", "")
+						end
+				end
         end
 
-        def file_path
+        def filepath
                 @filePath
         end
+		
+		def file_contents
+				@fileContents
+		end
 
-        def title
-                @fileContents[1][1]
-        end
 
         def send_date
                 @fileContents[3][1]
         end
+#=begin		
+        def title
+                @fileContents[1][1]
+        end
 
+ 
         def successful_deliveries
                 @fileContents[7][1].gsub(",","")
         end
@@ -57,6 +79,7 @@ class Report
                 #an array of arrays
                 @fileContents[23..-1]
         end
+#=end		
 end
 
 class Stringdate
@@ -164,42 +187,21 @@ def check_range(date1, date2)
         end
 end
 
-def wave_the_magic_wand(path, date1, date2, path_out)
-        major_array = Array.new
-        
+def wave_the_magic_wand(path, date1, date2, path_out)        
+		#sanitize path for backslashes
+		#path=path.gsub("\/","\\")
+		path=path.gsub("\\","\/")
         #list files in current working directory
         file_list = Dir.glob("#{path}*.csv")
+		#file_list = Dir.glob("#{path}")
 
         #puts "File list: #{file_list}"
 
         start = Date.strptime(date1, '%m/%d/%Y')
         finish = Date.strptime(date2, '%m/%d/%Y')
-        
-        # for each file in list, make a new instance of the report class and print out its contents
-        file_list.each do |f|
-                #gather all this info as a hash and write it to a larger array
-                report = Report.new(f)
-                report_date = Date.parse(report.send_date)
 
-                unless report_date < start || report_date > finish
-                        @minor_hash = Hash.new
-                        @minor_hash["title"] = report.title
-                        @minor_hash["date"] = report.send_date
-                        @minor_hash["opens"] = report.total_opens.to_f
-                        @minor_hash["sd"] = report.successful_deliveries.to_f
-                        @minor_hash["uc"] = report.unique_clicks.to_f
-                        @minor_hash["uo"] = report.unique_opens.to_f
-                        @minor_hash["cr"] = report.click_rate.to_f
-                        @minor_hash["links"] = report.links
-                        major_array << @minor_hash
-                end
-        end
-       
-        # major array is now built of all reports, time to process ita
-        #puts "Major Array has been built."
-        #puts major_array
-        #puts "Processing output..."
-
+		#2017/04/22 -
+		#when testing, print variable output to this file. 
         output = [
                 [ "link",
                   " No. of Emails Sent in Date Range",
@@ -215,58 +217,182 @@ def wave_the_magic_wand(path, date1, date2, path_out)
 				  "Total Click Rate (total clicks/total opens)",
 				  "Individual's Interest Rate (total clicks/unique opens)"
                 ]
-        
         ]
+		#debugging output 
+		#output << ["path: #{path}"]
+		#output << ["file list:"]
+		#file_list.each do |f|
+		#		report = Report.new(f)
+		#		report_date = Date.parse(report.send_date)
+		#		if report_date > start and report_date < finish
+		#				output << [ f, report.title, report.send_date, report.successful_deliveries, report.unique_clicks, report.total_opens, report.unique_opens, report.total_recipients, report.click_rate ]
+		#				report.links.each do |link|
+		#					output << [link]
+		#				end
+		#		end	
+		#end
 
-        major_array.each do |f|
-                f["links"].each do |link|
-                        linkArray = link[0].split("?")
-                        value = linkArray[0]
+		#this array will contain each set of report data as an individual hash
+        major_array = Array.new
+        file_list.each do |f|
+                report = Report.new(f)
+                report_date = Date.parse(report.send_date)
+                if report_date > start and report_date < finish
+                        minor_hash = Hash.new
+                        minor_hash["title"] = report.title
+                        minor_hash["date"] = report.send_date
+                        minor_hash["opens"] = report.total_opens.to_f
+                        minor_hash["sd"] = report.successful_deliveries.to_f
+                        minor_hash["uc"] = report.unique_clicks.to_f
+                        minor_hash["uo"] = report.unique_opens.to_f
+                        minor_hash["cr"] = report.click_rate.to_f
+                        minor_hash["links"] = report.links
+                        major_array << minor_hash
+                end
+        end
+		
+		#debug
+		#major_array.each do |hash|
+		#		hash.each_pair do |k,v|
+		#			if k == "links"
+		#				v.each do |linkA|
+		#					linkName = linkA[0].split('?')[0]
+		#					output << [ linkName ]
+		#				end
+		#			else
+		#				output << [k,v]
+		#			end
+		#		end
+		#end
+		major_array.each do |hash|
+				hash["links"].each do |linkA|
+						linkName = linkA[0].split('?')[0]
+						link_found_in_output = false
+						#find line with link in it
+						n = 0
+						link_line = nil
+						output.each do |line|
+								if line.include?(linkName)
+										link_line = n
+										break
+								else
+										n+=1
+								end								
+						end
+						if link_line != nil
+								#0 link text grabbed on init
+                                #1 number of emails in date range calculated on init                                        
+                                #2 add to number of emails ad shown
+                                output[link_line][2] += 1
+                                #3 add to no. subscribers sent emails w/add 
+                                output[link_line][3] += hash["sd"]
+                                #4 add to opens
+                                output[link_line][4] += hash["opens"]
+                                #5 open rate calculated after total
+                                #6 add to unique opens
+                                output[link_line][6] += hash["uo"]
+                                #7 unique open rate calculated after total
+                                #8 add to unique clicks
+                                output[link_line][8] += linkA[2].to_f
+                                #9 unique click rate calculated after total
+								#10 add to total clicks=begin
+								output[link_line][10] += linkA[1].to_f
+								#11 total click rate calculated after total
+								#12 IIR calc. after total
+						else
+						
+=begin
+								#LEGEND:
+								#0 link text
+								linkName,
+								#1 number of emails in date range
+								major_array.count,
+								#2 nunmber of emails ad shown - 
+								#since this is the first time this link is found in the output,
+								#it will be 1
+								1,
+								#3  no. of subscribers sent emails w/ add
+								hash["sd"],
+								#4 no. of opens
+								hash["opens"],
+								#5 open rate calculated after total
+								"Open Rate",
+								#6 unique opens
+								hash["uo"],
+								#7 unique open rate calculated after total
+								"Unique Open Rate",
+								#8 Unique Clicks
+								linkA[2].to_f,
+								#9 unique click rate calculated after total
+								"Unique Click Rate",
+								#10 total clicks
+								linkA[1].to_f,
+								#11 total click rate calculated after total
+								"Total Click Rate",
+								#12 IIR calculated after total
+								"Individual's Interest Rate"
+=end
+								output << [ linkName, major_array.count, 1, hash["sd"], hash["opens"], 0, hash["uo"], 0, linkA[2].to_f, 0, linkA[1].to_f, 0, 0 ]
+						end
+				end
+		end
+=begin
+		#OLD CODE HERE LEFT FOR POSTERITY AND HISTORICAL CONTEXT
+        #the major_array is now built of all reports in the given date range, time to process it
+        
+        major_array.each do |hash|
+                hash["links"].each do |link|
+						#the line containing the link is an array with 3 values: the link and two numbers
+						#take the link in the first index and split it by '?', then take the first index of that array to get the link name
+                        linkName = link[0].split('?')[0]
                         exists = false
-                        emails_shown = 1
 
+						#iterate over each line of the output file to verify if the link data already exists there
+						#if the link already exists, add the data to that line right away and break from the loop
                         output.each do |line|
-                                if line.include?(value) == true
+                                if line.include?(linkName) == true
                                         exists = true
-                                        # link text grabbed on init
-                                        # no. emails in date range  only calculated on init                                        
-                                        # ad to no. of emails ad shown
-                                        line[2] += 1
+                                        #link text grabbed on init
+                                        #number of emails in date range calculated on init                                        
+                                        #add to number of emails ad shown
+                                        line[2].to_f += 1
                                         # add to no. subscribers sent emails w/add 
-                                        line[3] += f["sd"]
+                                        line[3].to_f += hash["sd"]
                                         # add to opens
-                                        line[4] += f["opens"]
+                                        line[4].to_f += hash["opens"]
                                         #open rate calculated after total
                                         #add to unique opens
-                                        line[6] += f["uo"]
+                                        line[6].to_f += hash["uo"]
                                         #unique open rate calculated after total
                                         #add to unique clicks
-                                        line[8] += link[2].to_f
+                                        line[8].to_f += link[2].to_f
                                         #unique click rate calculated after total
 										#add to total clicks
-										line[10] += link[1].to_f
+										line[10].to_f += link[1].to_f
 										#total click rate calculated after total
 										#IIR calc. after total
                                         break
                                 end
                         end
 
+						#if the data is proven non-existent in the output after iterating over everything so far, add the current data
                         if exists == false
                                 output << [ 
                                             #link text
-                                            value,
+                                            linkName,
                                             # no. of emails in date range
                                             major_array.count,
-                                            # no. of emails ad shown
-                                            emails_shown,
+                                            # no. of emails ad shown - since this is the first time this link is found in the output, 
+											#it will be 1
+                                            1,
                                             # no. of subscribers sent emails w/ add
-                                            f["sd"],
+                                            hash["sd"],
                                             # no. of opens
-                                            f["opens"],
+                                            hash["opens"],
                                             #open rate calculated after total
                                             "Open Rate",
                                             # unique opens
-                                            f["uo"],
+                                            hash["uo"],
                                             #unique open rate calculated after total
                                             "Unique Open Rate",
                                             # Unique Clicks
@@ -282,14 +408,18 @@ def wave_the_magic_wand(path, date1, date2, path_out)
                         end
                 end
         end
+=end
 
-        # calculate open rate
+		#now that the output has been assembled from all the links in all the reports within the date range, 
+		#we calculate the totals for the month
+        #
         output[1..-1].each do |array|
-                d = (array[4] / array[3]) * 100
-
+                d = (array[4].to_f / array[3].to_f) * 100
+				
+				#print the float with 5 digits to the left of the decimal and two to the right
                 array[5] = "%5.2f" % d
         end
-
+#=begin
         # calculate unique open rate
         output[1..-1].each do |array|
                 d = (array[6] / array[3]) * 100
@@ -306,7 +436,7 @@ def wave_the_magic_wand(path, date1, date2, path_out)
 
 		#calculate total click rate
         output[1..-1].each do |array|
-                d = (array[10] / array[3]) * 100
+                d = (array[10] / array[4]) * 100
 
                 array[11] = "%5.2f" % d
         end
@@ -318,14 +448,15 @@ def wave_the_magic_wand(path, date1, date2, path_out)
                 array[12] = "%5.2f" % d
         end
 		
-        #puts "Output:"
-        #puts output
 
+#=end
+		#write the output file from the array
         CSV.open("#{path_out}","wb")  do |f|
                 output.each do |array|
                         f << array
                 end
         end
+
 end
 
 def os_type
@@ -425,7 +556,8 @@ Shoes.app :title => "Report Wizzard", width: 1050, height: 750 do
 														fList = Dir.glob("#{@path}*.csv")
                                                         wave_the_magic_wand(@path, start.string, finish.string, @output_path)
                                                         #alert "POOF! \n\n Input path: #{@path}\nFile saved to: \n #{@output_path}"
-														alert "POOF! \n\nInput path: #{@path}\nOutput file: #{@output_path}\nFile list:\n#{fList}"
+														#alert "POOF! \n\nInput path: #{@path}\nOutput file: #{@output_path}\nFile list:\n#{fList}"
+														alert "POOF! \n\nInput path: #{@path}\nOutput file: #{@output_path}\n"
                                                 end
                                         end
                                 end
